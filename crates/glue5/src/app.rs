@@ -285,6 +285,17 @@ impl App {
                 }
                 return Ok(());
             }
+            // A phone's driver can lose the GPU's context and go on answering
+            // submissions (its queue reports every job failed, the frames
+            // never come): the polls the renderer waits on succeed, so the
+            // frames themselves are the only witness left.
+            if MOBILE
+                && self.game.is_some()
+                && !self.lifecycle.background.load(Ordering::Relaxed)
+                && glue5_gpu::perf::since_present().is_some_and(|ago| ago >= std::time::Duration::from_secs(15))
+            {
+                glue5_runtime::exit::fail("the GPU stopped showing the game's frames (its queue died)");
+            }
             if let Some(why) = glue5_runtime::exit::failed() {
                 self.stopped(why);
                 return Ok(());
@@ -601,6 +612,8 @@ impl App {
         };
         let started =
             Started { game_dir, max_fps: s.max_fps, low_memory: s.low_memory, render_scale: s.render_scale() };
+        // The liveness check's clock: the game's first frame is on its way.
+        glue5_gpu::perf::mark_present();
         self.game = Some(Running { game, input: None, started, back_buffer, _audio: audio });
         self.ui.game_started();
         Ok(())

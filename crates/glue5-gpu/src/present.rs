@@ -828,6 +828,7 @@ impl Output {
             Image::Surface(surface) => {
                 drop(frame.texture);
                 queue.present(surface);
+                crate::perf::mark_present();
             }
             Image::Offscreen => self.show_offscreen(device, queue, &frame),
         }

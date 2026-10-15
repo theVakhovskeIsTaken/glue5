@@ -42,6 +42,18 @@ pub fn gpu_budget() -> u64 {
     GPU_BUDGET.load(Ordering::Relaxed)
 }
 
+static LAST_PRESENT: Mutex<Option<Instant>> = Mutex::new(None);
+
+/// A frame reached the screen.
+pub fn mark_present() {
+    *LAST_PRESENT.lock().unwrap() = Some(Instant::now());
+}
+
+/// How long ago the last frame was shown (None: none yet).
+pub fn since_present() -> Option<Duration> {
+    LAST_PRESENT.lock().unwrap().map(|at| at.elapsed())
+}
+
 /// The overlay's figures.
 #[derive(Clone, Default)]
 pub struct Snapshot {
