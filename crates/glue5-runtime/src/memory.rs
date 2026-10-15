@@ -334,6 +334,44 @@ unsafe fn over_budget(env: *mut Env, this: u64) -> u64 {
     }
 }
 
+/// The adapter the engine picked (`grcDevice::InitAdapterOrdinal`'s), the
+/// number of adapters, and their descriptions, at these addresses in this
+/// build. A description's video memory is at offset 48.
+const ADAPTER_ORDINAL: u64 = 6639464;
+const ADAPTER_COUNT: u64 = 12484032;
+const ADAPTER_TABLE: u64 = 12484024;
+const ADAPTER_VRAM: u64 = 48;
+
+/// Hook for `rage::grcResourceCache::UpdateTotalAvailableMemory()`: the
+/// engine's resource cache, and the video memory its settings menu shows,
+/// follow the adapter's video memory, which the browser build's stand-in
+/// reports as 2 GiB whatever the device has. Capped at the GPU's budget,
+/// the engine's own eviction and recommendations fit the device: the
+/// streaming engine holds the line instead of the renderer's backpressure.
+pub(crate) unsafe extern "C" fn update_total_available_memory(env: *mut Env) {
+    let mem = unsafe { Mem::of(env) };
+    let size = crate::rt().memory.size();
+    let within = |addr: u64, len: u64| addr != 0 && addr.checked_add(len).is_some_and(|end| end <= size);
+    let cap = gpu_budget();
+    let ordinal = u64::from(mem.u32(ADAPTER_ORDINAL));
+    if cap != 0 && ordinal < u64::from(mem.u16(ADAPTER_COUNT)) && within(ADAPTER_TABLE, 8) {
+        let table = mem.u64(ADAPTER_TABLE);
+        let desc = within(table + ordinal * 8, 8).then(|| mem.u64(table + ordinal * 8)).filter(|&d| d != 0);
+        if let Some(desc) = desc.filter(|&d| within(d + ADAPTER_VRAM, 8)) {
+            let vram = mem.u64(desc + ADAPTER_VRAM);
+            if vram > cap {
+                mem.set_u64(desc + ADAPTER_VRAM, cap);
+                log::info!(
+                    "game settings: the adapter's video memory {} MiB capped to the GPU's {} MiB budget",
+                    vram >> 20,
+                    cap >> 20
+                );
+            }
+        }
+    }
+    unsafe { orig::update_total_available_memory(env) }
+}
+
 fn asking<R>(f: impl FnOnce() -> R) -> R {
     ASKING.set(true);
     let r = f();
@@ -346,4 +384,5 @@ pub(crate) fn hooks(hooks: &mut glue5_game::Hooks) {
     hooks.grow_heap = Some(grow_heap);
     hooks.memory_available = Some(memory_available);
     hooks.largest_block = Some(largest_block);
+    hooks.update_total_available_memory = Some(update_total_available_memory);
 }
