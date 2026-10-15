@@ -270,7 +270,7 @@ pub fn gpu_budget() -> u64 {
         return (mb > 0).then(|| mb << 20).unwrap_or(0);
     }
     if cfg!(any(target_os = "ios", target_os = "android")) {
-        return 640 << 20;
+        return 850 << 20;
     }
     0
 }

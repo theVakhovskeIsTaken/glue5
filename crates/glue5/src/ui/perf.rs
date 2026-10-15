@@ -174,7 +174,7 @@ impl PerfHud {
         let (w, h) = status.window;
         let scaled = status.back_buffer.filter(|&b| b != (w, h));
         if full {
-            height += 7.0 + ROW * threads as f32 + 7.0 + ROW * (3 + scaled.is_some() as usize) as f32;
+            height += 7.0 + ROW * threads as f32 + 7.0 + ROW * (4 + scaled.is_some() as usize) as f32;
         }
         let rect = place(safe, settings.overlay_corner, vec2(width, height));
         painter.rect_filled(rect, 6.0, BACKGROUND);
