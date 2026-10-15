@@ -21,7 +21,7 @@ const FRAMES_IN_FLIGHT: usize = 2;
 /// Batches handed over but not submitted, at most: the recording thread
 /// waits beyond (about a frame's worth).
 const PENDING: usize = 8;
-const ENCODE_THREADS: usize = 2;
+const ENCODE_THREADS: usize = if cfg!(target_os = "android") { 4 } else { 2 };
 
 /// What a flush hands over.
 pub struct Batch {

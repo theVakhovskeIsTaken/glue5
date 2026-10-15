@@ -16,7 +16,7 @@ use crate::shader::{self, Kind, Program, Sample, Stage};
 use crate::uniforms::{Alloc, Uniforms};
 
 /// Render passes per submit, at most (see `Gpu::ensure_pass`).
-const CHUNK_PASSES: u32 = 16;
+const CHUNK_PASSES: u32 = if cfg!(target_os = "android") { 8 } else { 16 };
 
 const ZERO_VB: u64 = 4096;
 
