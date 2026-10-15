@@ -33,6 +33,24 @@ const LOW: &[(&str, &str)] = &[
     ("VehicleLodBias", "0.000000"),
 ];
 
+/// The phone preset: most of the low-memory preset's GPU memory (textures at
+/// medium are about half of high's, the level-of-detail settings less still),
+/// with the streaming distances and the variety left playable: objects appear
+/// where they can be seen, not at the bumper.
+const PHONE: &[(&str, &str)] = &[
+    ("TextureQuality", "1"),
+    ("ShadowQuality", "1"),
+    ("ReflectionQuality", "0"),
+    ("ParticleQuality", "0"),
+    ("GrassQuality", "0"),
+    ("CityDensity", "0.600000"),
+    ("PedVarietyMultiplier", "0.500000"),
+    ("VehicleVarietyMultiplier", "0.500000"),
+    ("LodScale", "0.800000"),
+    ("PedLodBias", "0.500000"),
+    ("VehicleLodBias", "0.500000"),
+];
+
 /// What the engine writes when it first starts without settings (its
 /// defaults for the adapter it is given, the same everywhere).
 const DEFAULTS: &str = include_str!("settings.xml");
@@ -41,6 +59,12 @@ const DEFAULTS: &str = include_str!("settings.xml");
 /// defaults, before its first start).
 pub fn apply_low_preset(user_dir: &Path) -> io::Result<()> {
     apply(user_dir, LOW)
+}
+
+/// Writes the phone preset over the current settings (or the engine's
+/// defaults, before its first start).
+pub fn apply_phone_preset(user_dir: &Path) -> io::Result<()> {
+    apply(user_dir, PHONE)
 }
 
 /// Writes `settings` (name, value) over the current settings (or the
@@ -120,7 +144,7 @@ mod tests {
 
     #[test]
     fn preset_names_are_in_the_defaults() {
-        for (name, _) in LOW {
+        for (name, _) in LOW.iter().chain(PHONE) {
             assert!(DEFAULTS.contains(&format!("<{name} value=\"")), "{name}");
         }
     }

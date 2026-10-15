@@ -557,6 +557,15 @@ impl App {
                 Err(e) => log::warn!("cannot write the low-memory preset: {e}"),
             }
         }
+        if MOBILE && !self.settings.low_memory && !self.settings.phone_preset_written {
+            match glue5_runtime::game_settings::apply_phone_preset(&self.user_dir) {
+                Ok(()) => {
+                    self.settings.phone_preset_written = true;
+                    log::info!("the game's graphics settings: phone preset written");
+                }
+                Err(e) => log::warn!("cannot write the phone preset: {e}"),
+            }
+        }
         if self.mode == Mode::Online && self.settings.online_name.trim().is_empty() {
             self.settings.online_name = settings::default_online_name();
         }

@@ -19,6 +19,10 @@ pub struct Settings {
     /// Whether the low-memory preset is in the game's settings (written at
     /// the first start with `low_memory`; the game's menu changes it after).
     pub low_preset_written: bool,
+    /// Whether the phone preset is in the game's settings (written at the
+    /// first start on a phone without `low_memory`; the menu changes it
+    /// after).
+    pub phone_preset_written: bool,
     /// The game's resolution as a fraction of the window's, per side (the
     /// back buffer follows the window). Chosen for the screen at the first
     /// start ([`Settings::for_screen`]).
@@ -151,6 +155,7 @@ impl Default for Settings {
             game_dir: None,
             low_memory: MOBILE && sdl3::cpuinfo::system_ram() < LOW_MEMORY_RAM_MB,
             low_preset_written: false,
+            phone_preset_written: false,
             render_scale: None,
             vsync: true,
             // Phones hold a steady 60 for longer than they hold 120 (heat).

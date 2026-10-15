@@ -243,11 +243,17 @@ impl PerfHud {
         }
         y += ROW;
         let gb = |bytes: u64| format!("{:.1} GB", bytes as f64 / (1u64 << 30) as f64);
+        let gpu_mem = match glue5_gpu::perf::gpu_budget() {
+            0 => gb(f.gpu_bytes),
+            budget => format!("{} / {}", gb(f.gpu_bytes), gb(budget)),
+        };
         let memory = match self.threads.footprint {
-            Some(used) => format!("{} · gpu {}", gb(used), gb(f.gpu_bytes)),
-            None => format!("gpu {}", gb(f.gpu_bytes)),
+            Some(used) => format!("{} · gpu {}", gb(used), gpu_mem),
+            None => format!("gpu {}", gpu_mem),
         };
         row(y, "mem", memory, TEXT);
+        y += ROW;
+        row(y, "gpu", glue5_gpu::perf::gpu_name().to_owned(), TEXT);
     }
 }
 

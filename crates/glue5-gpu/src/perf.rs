@@ -10,7 +10,8 @@
 
 use std::collections::VecDeque;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::done::{Staging, StagingPool, Work};
@@ -20,6 +21,26 @@ pub const FRAMES: usize = 120;
 
 static ON: AtomicBool = AtomicBool::new(false);
 static LIVE: Mutex<Live> = Mutex::new(Live::new());
+static GPU_NAME: OnceLock<String> = OnceLock::new();
+static GPU_BUDGET: AtomicU64 = AtomicU64::new(0);
+
+/// The GPU the renderer runs on, for the performance overlay.
+pub fn set_gpu_name(name: String) {
+    let _ = GPU_NAME.set(name);
+}
+
+pub fn gpu_name() -> &'static str {
+    GPU_NAME.get().map(String::as_str).unwrap_or("")
+}
+
+/// The GPU memory budget the renderer keeps (0: none), for the overlay.
+pub fn set_gpu_budget(bytes: u64) {
+    GPU_BUDGET.store(bytes, Ordering::Relaxed);
+}
+
+pub fn gpu_budget() -> u64 {
+    GPU_BUDGET.load(Ordering::Relaxed)
+}
 
 /// The overlay's figures.
 #[derive(Clone, Default)]

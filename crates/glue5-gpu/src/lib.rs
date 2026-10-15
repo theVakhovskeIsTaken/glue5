@@ -274,6 +274,7 @@ impl Device {
         }))
         .context("no GPU adapter")?;
         let info = adapter.get_info();
+        crate::perf::set_gpu_name(info.name.clone());
         let mut features = adapter.features() & WANTED_FEATURES;
         if std::env::var_os("GLUE5_NO_BC").is_some() {
             // Test the CPU decoding path of devices without BC compression.
@@ -385,6 +386,14 @@ fn init(ring: GpuRing, settings: Settings, screen: Option<Screen>) -> Result<exe
 
     let profiler = profile.then(|| profile::Profiler::new(&device, &queue));
     let gpu_timer = perf::GpuTimer::new(&device, &queue);
+    let budget = std::env::var("GLUE5_GPU_BUDGET_MB")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .map_or_else(
+            || cfg!(any(target_os = "ios", target_os = "android")).then(|| 640u64 << 20),
+            |mb| (mb > 0).then(|| mb << 20),
+        );
+    crate::perf::set_gpu_budget(budget.unwrap_or(0));
     let uploads = uploads::Uploads::new(device.clone());
     let recycler = recycle::Recycler::default();
     let slabs = slabs::Slabs::new(device.clone(), recycler.finished.clone());
@@ -409,6 +418,8 @@ fn init(ring: GpuRing, settings: Settings, screen: Option<Screen>) -> Result<exe
         pool: pool::Pool::new("gpu compile", threads),
         staging,
         ring,
+        budget,
+        budget_stall: Instant::now(),
         settings,
         objs: Default::default(),
         s: Default::default(),

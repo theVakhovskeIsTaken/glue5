@@ -148,6 +148,8 @@ pub struct Stats {
     pub submits: FxHashMap<&'static str, u64>,
     pub presents: u64,
     pub bind_groups: u64,
+    /// Frames a texture or buffer waited for GPU memory under the budget.
+    pub budget_stalls: u64,
     pub busy: Duration,
     /// Present-to-present intervals, in milliseconds.
     pub frame_ms: Vec<f32>,
@@ -248,6 +250,9 @@ pub struct Gpu {
     pub total_presents: u64,
     pub started: Instant,
     pub last_stats: Instant,
+    /// The device memory (textures, buffers) kept under, or None.
+    pub budget: Option<u64>,
+    pub budget_stall: Instant,
     /// The counters at the last frame, for the performance overlay.
     pub perf: crate::perf::Mark,
     pub gpu_timer: crate::perf::GpuTimer,
@@ -624,6 +629,7 @@ impl Gpu {
         if self.objs.tex(id).is_some() {
             return;
         }
+        self.throttle_gpu_budget();
         let dimension = match dim {
             1 => wgpu::TextureDimension::D1,
             3 => wgpu::TextureDimension::D3,
@@ -745,6 +751,7 @@ impl Gpu {
     }
 
     fn create_buffer(&mut self, id: u32, size: u32, bind: u32, misc: u32, stride: u32) {
+        self.throttle_gpu_budget();
         let mut usage = wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC;
         if bind & format::BIND_VERTEX != 0 {
             usage |= wgpu::BufferUsages::VERTEX;
@@ -1187,7 +1194,7 @@ impl Gpu {
             ends.iter().take(6).map(|(op, n)| format!("op {op} {:.1}", **n as f64 / frames as f64)).collect();
         self.perf.reset();
         let [textures, buffers] = self.gpu_bytes();
-        let memory = format!(
+        let mut memory = format!(
             "textures {} MiB, buffers {} MiB (small ones {} MiB in {} MiB of slabs), constants {} MiB; {} reused",
             textures >> 20,
             buffers >> 20,
@@ -1196,6 +1203,10 @@ impl Gpu {
             self.uniforms.bytes_allocated() >> 20,
             std::mem::take(&mut self.recycler.reused)
         );
+        if let Some(budget) = self.budget {
+            let more = format!(", {} of {} MiB, {} stalls", (textures + buffers) >> 20, budget >> 20, st.budget_stalls);
+            memory.push_str(&more);
+        }
         let mut frames_line = frame_times(st.frame_ms) + &on_screen(crate::present::take_on_screen());
         if let Some(ms) = crate::present::take_upscaling() {
             frames_line += &format!(", upscaling {ms:.2} ms GPU");
@@ -1264,6 +1275,37 @@ impl Gpu {
             }
         }
         [textures, buffers]
+    }
+
+    /// The engine's streamed objects are GPU memory the driver cannot always
+    /// spare (a phone's queue dies, or its host-side allocator): over the
+    /// budget, a new texture or buffer waits for what the engine has
+    /// destroyed to be handed over and released, so its streaming sees the
+    /// frames slow and holds back, as the browser build's did.
+    fn throttle_gpu_budget(&mut self) {
+        let Some(budget) = self.budget else { return };
+        let [textures, buffers] = self.gpu_bytes();
+        if textures + buffers <= budget || self.budget_stall.elapsed() < Duration::from_millis(100) {
+            return;
+        }
+        self.budget_stall = Instant::now();
+        self.stats.budget_stalls += 1;
+        self.flush("budget");
+        let deadline = Instant::now() + Duration::from_millis(250);
+        while Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(2));
+            let [textures, buffers] = self.gpu_bytes();
+            if textures + buffers <= budget {
+                return;
+            }
+        }
+        crate::log_once("gpu budget", || {
+            format!(
+                "gpu: over its memory budget ({} MiB of {} MiB): frames wait while the engine evicts",
+                (textures + buffers) >> 20,
+                budget >> 20
+            )
+        });
     }
 
     /// What Metal has allocated for the device, all resources included.
