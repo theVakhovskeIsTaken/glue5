@@ -120,7 +120,15 @@ pub unsafe extern "C" fn wasm_module_int_js(env: *mut Env, name: u64, default: u
     // grows by 256 MiB each time: past 2.5 GiB in the game's benchmark.
     let phone = cfg!(any(target_os = "ios", target_os = "android"));
     if name == "gameResourceMB" && (low || phone) {
+        // The heap's live set is what the GPU holds of it: capped at the
+        // renderer's memory budget, the engine's own eviction holds the
+        // GPU's down too.
+        let value = match crate::memory::gpu_budget() {
+            0 => value,
+            cap => value.min((cap >> 20) as u32),
+        };
         crate::memory::budget_resource_heap(value);
+        return value;
     }
     value
 }

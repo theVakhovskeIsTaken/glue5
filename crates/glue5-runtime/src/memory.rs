@@ -261,6 +261,20 @@ thread_local! {
     static ASKING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
+/// The GPU memory budget, in bytes (0: none): `GLUE5_GPU_BUDGET_MB`, or a
+/// phone's default. The renderer keeps its objects under it, and the
+/// engine's resource heap is capped at it, so its own eviction holds the
+/// GPU's memory down.
+pub fn gpu_budget() -> u64 {
+    if let Some(mb) = std::env::var("GLUE5_GPU_BUDGET_MB").ok().and_then(|v| v.parse::<u64>().ok()) {
+        return (mb > 0).then(|| mb << 20).unwrap_or(0);
+    }
+    if cfg!(any(target_os = "ios", target_os = "android")) {
+        return 640 << 20;
+    }
+    0
+}
+
 /// Budgets the resource heap at `mb` MiB (the engine's `gameResourceMB`).
 pub(crate) fn budget_resource_heap(mb: u32) {
     RESOURCE_BUDGET.store((mb as u64) << 20, Ordering::Relaxed);

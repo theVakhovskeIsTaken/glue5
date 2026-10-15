@@ -1291,7 +1291,10 @@ impl Gpu {
         self.budget_stall = Instant::now();
         self.stats.budget_stalls += 1;
         self.flush("budget");
-        let deadline = Instant::now() + Duration::from_millis(250);
+        // The engine's eviction (its resource heap, budgeted with ours)
+        // needs the ring running: a short wait, only for what this flush
+        // can free.
+        let deadline = Instant::now() + Duration::from_millis(50);
         while Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(2));
             let [textures, buffers] = self.gpu_bytes();
