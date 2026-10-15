@@ -301,7 +301,11 @@ impl Device {
         .context("creating the GPU device")?;
         log::info!("gpu: {} ({:?}, {}), features {:?}", info.name, info.backend, info.driver_info, features);
         device.on_uncaptured_error(error_handler(None));
-        device.set_device_lost_callback(|reason, message| log::error!("gpu: device lost ({reason:?}): {message}"));
+        device.set_device_lost_callback(|reason, message| {
+            if !matches!(reason, wgpu::DeviceLostReason::Destroyed) {
+                glue5_runtime::exit::fail(format!("the GPU device was lost ({reason:?}): {message}"));
+            }
+        });
         Ok(Device { adapter, device, queue, features, profile })
     }
 }
@@ -391,6 +395,7 @@ fn init(ring: GpuRing, settings: Settings, screen: Option<Screen>) -> Result<exe
             done::Done::start(device.clone(), ring.mem(), staging.clone()),
             uploads.free_chunks(),
             output,
+            ring,
             recycler.finished.clone(),
         ),
         uniforms: uniforms::Uniforms::new(limits.min_uniform_buffer_offset_alignment),

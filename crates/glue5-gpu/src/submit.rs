@@ -15,6 +15,7 @@ use std::time::{Duration, Instant};
 use crate::done::{Done, Staging, Work};
 use crate::present::Output;
 use crate::uploads::FreeChunks;
+use glue5_runtime::gpu::GpuRing;
 
 /// Frames submitted but not finished by the GPU, at most.
 const FRAMES_IN_FLIGHT: usize = 2;
@@ -107,6 +108,7 @@ impl Submitter {
         done: Done,
         free: FreeChunks,
         output: Option<Output>,
+        ring: GpuRing,
         finished: Arc<AtomicU64>,
     ) -> Submitter {
         let stats = Arc::new(SubmitStats::default());
@@ -135,10 +137,10 @@ impl Submitter {
         let (thread_stats, thread_encoding) = (stats.clone(), encoding.clone());
         std::thread::Builder::new()
             .name("gpu submit".into())
-            .spawn(move || {
-                glue5_runtime::qos::set(glue5_runtime::qos::Qos::Interactive);
-                run(device, queue, done, free, output, rx, thread_stats, thread_encoding, finished)
-            })
+                .spawn(move || {
+                    glue5_runtime::qos::set(glue5_runtime::qos::Qos::Interactive);
+                    run(device, queue, done, free, output, ring, rx, thread_stats, thread_encoding, finished)
+                })
             .expect("spawning the GPU submit thread");
         Submitter { jobs, batches, encoding, stats }
     }
@@ -165,6 +167,7 @@ fn run(
     done: Done,
     free: FreeChunks,
     mut output: Option<Output>,
+    ring: GpuRing,
     rx: Receiver<(Batch, Encoded)>,
     stats: Arc<SubmitStats>,
     encoding: Arc<AtomicUsize>,
@@ -251,11 +254,23 @@ fn run(
             if in_flight.len() > FRAMES_IN_FLIGHT {
                 let oldest = in_flight.pop_front().unwrap();
                 let t = Instant::now();
-                let _ = device.poll(wgpu::PollType::Wait {
-                    submission_index: Some(oldest),
-                    timeout: Some(Duration::from_secs(5)),
-                });
+                let waited = device
+                    .poll(wgpu::PollType::Wait {
+                        submission_index: Some(oldest.clone()),
+                        timeout: Some(Duration::from_secs(5)),
+                    })
+                    .or_else(|_| {
+                        device.poll(wgpu::PollType::Wait {
+                            submission_index: Some(oldest),
+                            timeout: Some(Duration::from_secs(5)),
+                        })
+                    });
                 stats.gpu_wait_ns.fetch_add(t.elapsed().as_nanos() as u64, Ordering::Relaxed);
+                if let Err(e) = waited {
+                    ring.set_state(glue5_runtime::gpu::State::Failed);
+                    glue5_runtime::exit::fail(format!("the GPU stopped executing the game's frames ({e})"));
+                    return;
+                }
             }
         }
     }
