@@ -57,6 +57,9 @@ pub fn run() -> Result<()> {
     sdl3::hint::set("SDL_VIDEO_METAL_AUTO_RESIZE_DRAWABLE", "0");
     let user_dir = paths::user_dir()?;
     let mut settings = Settings::load(&user_dir);
+    // The Vulkan pools' trimming is the process's choice before any device
+    // opens (the Bifrost/Valhall reuse hazard is not worth "as before").
+    settings.apply_env();
     // Before the GPU opens; turned on later, it shows from the next launch.
     let metal_hud = cfg!(target_vendor = "apple") && settings.overlay == PerfOverlay::MetalHud;
     if metal_hud {
@@ -94,6 +97,11 @@ pub fn run() -> Result<()> {
         presentation: presentation.clone(),
         overlay: overlay.clone(),
     })?;
+    // The adapter's family is only known now its device opened: tune the
+    // defaults for it once, and the player's changes after are theirs.
+    settings.tune_for_adapter(glue5_gpu::perf::gpu_name());
+    settings.apply_env();
+    settings.save(&user_dir);
     // While the system resizes the window in a loop of its own (macOS,
     // Windows), events wait for it to end, and so does this loop; SDL still
     // calls watches, and from there the renderer follows the window. The
@@ -550,6 +558,8 @@ impl App {
     /// takes the screen over.
     fn play(&mut self) -> Result<()> {
         let Some(game_dir) = self.game_dir.clone() else { return Ok(()) };
+        // A toggle made mid-session rides with the next game's device.
+        self.settings.apply_env();
         let mut gpu_settings = glue5_gpu::Settings::for_game(&game_dir);
         gpu_settings.cache_dir = Some(self.user_dir.join("cache"));
         gpu_settings.exit_on_lost_gpu = self.settings.exit_on_lost_gpu;

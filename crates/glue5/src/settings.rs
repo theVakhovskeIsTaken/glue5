@@ -31,6 +31,15 @@ pub struct Settings {
     /// Keep to the memory budget at all: off is the browser build's
     /// behaviour, unbounded everywhere.
     pub limit_gpu_memory: bool,
+    /// Keep the command buffers across the pools' resets instead of freeing
+    /// the ones no use since the last needed (the same switch as
+    /// `GLUE5_KEEP_COMMAND_BUFFERS`): off frees hundreds of MB of host
+    /// memory, and the Vulkan driver reuses its pages at once — on Mali,
+    /// while jobs still walk them (the flyover's freeze).
+    pub keep_command_buffers: bool,
+    /// The adapter's family the defaults above were tuned for, once
+    /// (`tune_for_adapter`); what the player changes after is theirs.
+    pub adapter_tuned: Option<String>,
     /// End the game when its GPU dies on it (a queue that only errors, or
     /// frames that stop coming): off stays on the last frame for the logs.
     pub exit_on_lost_gpu: bool,
@@ -168,7 +177,13 @@ impl Default for Settings {
             low_preset_written: false,
             phone_preset_written: false,
             gpu_budget_mb: None,
-            limit_gpu_memory: MOBILE,
+            // The fallback before any adapter is known: phones keep their
+            // buffers (the safe side of the Mali reset), the game runs
+            // unbounded, and the budget stays off until asked — the adapter
+            // families each get their exact tune once its device opens.
+            limit_gpu_memory: false,
+            keep_command_buffers: MOBILE,
+            adapter_tuned: None,
             exit_on_lost_gpu: true,
             render_scale: None,
             vsync: true,
@@ -192,6 +207,51 @@ impl Default for Settings {
             render_height: None,
             metalfx: None,
             metal_hud: None,
+        }
+    }
+}
+
+impl Settings {
+    /// The switch the Vulkan backend reads at the pools' resets, set in the
+    /// process before a device opens (and unset: its check is presence).
+    pub fn apply_env(&self) {
+        // SAFETY: this runs on the app's own thread, at its start and at a
+        // game's start; a reset's read only happens once the game runs from
+        // after it, so nothing cross-reads during the set.
+        if self.keep_command_buffers {
+            unsafe { std::env::set_var("GLUE5_KEEP_COMMAND_BUFFERS", "1") };
+        } else {
+            unsafe { std::env::remove_var("GLUE5_KEEP_COMMAND_BUFFERS") };
+        }
+    }
+
+    /// The defaults the first device's family is known to want, once (what
+    /// the player changes after is theirs; family changes retune).
+    pub fn tune_for_adapter(&mut self, gpu_name: &str) {
+        let n = gpu_name.to_ascii_lowercase();
+        let family = if n.contains("mali") {
+            Some("mali")
+        } else if n.contains("adreno") {
+            Some("adreno")
+        } else {
+            None
+        };
+        let Some(family) = family else { return };
+        if self.adapter_tuned.as_deref() == Some(family) {
+            return;
+        }
+        self.adapter_tuned = Some(family.into());
+        match family {
+            "mali" => {
+                self.limit_gpu_memory = false;
+                self.keep_command_buffers = true;
+            }
+            "adreno" => {
+                self.limit_gpu_memory = true;
+                self.gpu_budget_mb = Some(1500);
+                self.keep_command_buffers = false;
+            }
+            _ => {}
         }
     }
 }

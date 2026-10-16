@@ -801,6 +801,14 @@ fn settings_items(
             .on_hover_text("The engine's streaming evicts toward the memory budget and new textures wait for it. Off: no budget anywhere, as before.");
             setting(
                 ui,
+                "Keep GPU command buffers",
+                Control::Toggle,
+                next_start(started.is_some()),
+                |ui| toggle(ui, &mut settings.keep_command_buffers),
+            )
+            .on_hover_text("The Vulkan pools keep their command buffers across their resets, instead of freeing the ones no use since the last needed (hundreds of MB of host memory). Off: the trimming, whose freed pages the driver reuses at once — on Mali, while jobs still walk them.");
+            setting(
+                ui,
                 "Exit on a lost GPU",
                 Control::Toggle,
                 None,
