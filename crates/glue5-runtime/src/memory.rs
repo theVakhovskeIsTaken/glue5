@@ -266,8 +266,11 @@ thread_local! {
 /// engine's resource heap is capped at it, so its own eviction holds the
 /// GPU's memory down.
 pub fn gpu_budget() -> u64 {
-    if let Some(mb) = std::env::var("GLUE5_GPU_BUDGET_MB").ok().and_then(|v| v.parse::<u64>().ok()) {
-        return (mb > 0).then(|| mb << 20).unwrap_or(0);
+    if let Some(mb) = crate::rt().config.gpu_budget_mb.filter(|&mb| mb > 0) {
+        return u64::from(mb) << 20;
+    }
+    if let Some(mb) = std::env::var("GLUE5_GPU_BUDGET_MB").ok().and_then(|v| v.parse::<u64>().ok()).filter(|&mb| mb > 0) {
+        return mb << 20;
     }
     if cfg!(any(target_os = "ios", target_os = "android")) {
         return 850 << 20;

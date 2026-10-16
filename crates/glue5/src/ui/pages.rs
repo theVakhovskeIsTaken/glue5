@@ -723,6 +723,29 @@ fn settings_items(
             if r.changed() && settings.low_memory {
                 settings.low_preset_written = false;
             }
+            setting(
+                ui,
+                "GPU memory budget",
+                Control::Choice,
+                next_start(started.is_some()),
+                |ui| {
+                    choice(
+                        ui,
+                        &mut settings.gpu_budget_mb,
+                        &[
+                            (None, "Auto"),
+                            (Some(512), "512 MB"),
+                            (Some(640), "640 MB"),
+                            (Some(768), "768 MB"),
+                            (Some(850), "850 MB"),
+                            (Some(1024), "1 GB"),
+                            (Some(1280), "1.25 GB"),
+                            (Some(1536), "1.5 GB"),
+                        ],
+                    )
+                },
+            )
+            .on_hover_text("What the engine streams toward and the renderer keeps: the engine's streaming evicts past it, new textures wait for it. Auto: 850 MB on a phone, none on a desktop.");
             let dir = if started.is_some() { settings.game_dir.as_deref() } else { status.game_dir };
             let mut shown = dir.map_or_else(|| "Not found".to_owned(), |d| d.display().to_string());
             if started.is_some_and(|s| Some(s.game_dir.as_path()) != settings.game_dir.as_deref()) {

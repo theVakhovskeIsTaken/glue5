@@ -596,6 +596,7 @@ impl App {
                 start_mode: if self.mode == Mode::Sandbox { 2 } else { 1 },
                 benchmark: self.mode == Mode::Benchmark,
                 low_memory: s.low_memory,
+                gpu_budget_mb: s.gpu_budget_mb,
                 max_fps: s.max_fps,
                 online: (self.mode == Mode::Online)
                     .then(|| glue5_runtime::Online { name: s.online_name.trim().into(), lobby: s.lobby() }),

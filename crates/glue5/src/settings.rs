@@ -23,6 +23,11 @@ pub struct Settings {
     /// first start on a phone without `low_memory`; the menu changes it
     /// after).
     pub phone_preset_written: bool,
+    /// The GPU memory budget in MiB the engine and the renderer keep
+    /// (None: `GLUE5_GPU_BUDGET_MB`, else 850 MiB on a phone, none on a
+    /// desktop): the engine's streaming evicts toward it, the renderer's
+    /// texture creates wait for it.
+    pub gpu_budget_mb: Option<u32>,
     /// The game's resolution as a fraction of the window's, per side (the
     /// back buffer follows the window). Chosen for the screen at the first
     /// start ([`Settings::for_screen`]).
@@ -156,6 +161,7 @@ impl Default for Settings {
             low_memory: MOBILE && sdl3::cpuinfo::system_ram() < LOW_MEMORY_RAM_MB,
             low_preset_written: false,
             phone_preset_written: false,
+            gpu_budget_mb: None,
             render_scale: None,
             vsync: true,
             // Phones hold a steady 60 for longer than they hold 120 (heat).

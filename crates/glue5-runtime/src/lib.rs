@@ -94,6 +94,9 @@ pub struct Config {
     /// Smaller engine pools (with [`game_settings::apply_low_preset`], the
     /// browser build's `?low=1`).
     pub low_memory: bool,
+    /// The GPU memory budget in MiB (0: `GLUE5_GPU_BUDGET_MB`, else the
+    /// phone's default): the engine's heap and the renderer's textures.
+    pub gpu_budget_mb: Option<u32>,
     /// Frames per second at most: 0 lets the engine run as fast as the
     /// renderer presents (the display's refresh with vsync); 60 or 30 use
     /// the engine's own limiter.
