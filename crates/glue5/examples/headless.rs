@@ -192,6 +192,7 @@ fn main() -> Result<()> {
             height: args.size.1,
             start_mode: if args.sandbox { 2 } else { 1 },
             low_memory: low,
+            limit_gpu_memory: false,
             gpu_budget_mb: None,
             max_fps: args.fps,
             benchmark: args.benchmark,

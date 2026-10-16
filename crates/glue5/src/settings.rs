@@ -28,6 +28,12 @@ pub struct Settings {
     /// desktop): the engine's streaming evicts toward it, the renderer's
     /// texture creates wait for it.
     pub gpu_budget_mb: Option<u32>,
+    /// Keep to the memory budget at all: off is the browser build's
+    /// behaviour, unbounded everywhere.
+    pub limit_gpu_memory: bool,
+    /// End the game when its GPU dies on it (a queue that only errors, or
+    /// frames that stop coming): off stays on the last frame for the logs.
+    pub exit_on_lost_gpu: bool,
     /// The game's resolution as a fraction of the window's, per side (the
     /// back buffer follows the window). Chosen for the screen at the first
     /// start ([`Settings::for_screen`]).
@@ -162,6 +168,8 @@ impl Default for Settings {
             low_preset_written: false,
             phone_preset_written: false,
             gpu_budget_mb: None,
+            limit_gpu_memory: MOBILE,
+            exit_on_lost_gpu: true,
             render_scale: None,
             vsync: true,
             // Phones hold a steady 60 for longer than they hold 120 (heat).

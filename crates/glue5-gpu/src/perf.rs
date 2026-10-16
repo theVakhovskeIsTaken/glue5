@@ -23,6 +23,16 @@ static ON: AtomicBool = AtomicBool::new(false);
 static LIVE: Mutex<Live> = Mutex::new(Live::new());
 static GPU_NAME: OnceLock<String> = OnceLock::new();
 static GPU_BUDGET: AtomicU64 = AtomicU64::new(0);
+static EXIT_ON_LOST: AtomicBool = AtomicBool::new(true);
+
+/// Whether a dead GPU ends the game (the application's exit).
+pub fn set_exit_on_lost(on: bool) {
+    EXIT_ON_LOST.store(on, Ordering::Relaxed);
+}
+
+pub fn exit_on_lost() -> bool {
+    EXIT_ON_LOST.load(Ordering::Relaxed)
+}
 
 /// The GPU the renderer runs on, for the performance overlay.
 pub fn set_gpu_name(name: String) {

@@ -254,23 +254,25 @@ fn run(
             if in_flight.len() > FRAMES_IN_FLIGHT {
                 let oldest = in_flight.pop_front().unwrap();
                 let t = Instant::now();
-                let waited = device
-                    .poll(wgpu::PollType::Wait {
-                        submission_index: Some(oldest.clone()),
+                let mut waited = device.poll(wgpu::PollType::Wait {
+                    submission_index: Some(oldest.clone()),
+                    timeout: Some(Duration::from_secs(5)),
+                });
+                // A second, longer wait, only when a dead GPU ends the
+                // game: a healthy one is never 5 s behind the two frames
+                // kept in flight.
+                if waited.is_err() && crate::perf::exit_on_lost() {
+                    waited = device.poll(wgpu::PollType::Wait {
+                        submission_index: Some(oldest),
                         timeout: Some(Duration::from_secs(5)),
-                    })
-                    .or_else(|_| {
-                        device.poll(wgpu::PollType::Wait {
-                            submission_index: Some(oldest),
-                            timeout: Some(Duration::from_secs(5)),
-                        })
                     });
-                stats.gpu_wait_ns.fetch_add(t.elapsed().as_nanos() as u64, Ordering::Relaxed);
-                if let Err(e) = waited {
-                    ring.set_state(glue5_runtime::gpu::State::Failed);
-                    glue5_runtime::exit::fail(format!("the GPU stopped executing the game's frames ({e})"));
-                    return;
+                    if let Err(e) = waited {
+                        ring.set_state(glue5_runtime::gpu::State::Failed);
+                        glue5_runtime::exit::fail(format!("the GPU stopped executing the game's frames ({e})"));
+                        return;
+                    }
                 }
+                stats.gpu_wait_ns.fetch_add(t.elapsed().as_nanos() as u64, Ordering::Relaxed);
             }
         }
     }

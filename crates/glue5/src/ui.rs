@@ -132,6 +132,7 @@ enum SettingsTab {
     Video,
     Controls,
     Game,
+    Experimental,
 }
 
 pub struct Ui {

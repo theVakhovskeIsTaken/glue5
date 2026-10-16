@@ -97,6 +97,9 @@ pub struct Config {
     /// The GPU memory budget in MiB (0: `GLUE5_GPU_BUDGET_MB`, else the
     /// phone's default): the engine's heap and the renderer's textures.
     pub gpu_budget_mb: Option<u32>,
+    /// Keep the engine and its renderer in the GPU memory budget (off:
+    /// unbounded, as before it).
+    pub limit_gpu_memory: bool,
     /// Frames per second at most: 0 lets the engine run as fast as the
     /// renderer presents (the display's refresh with vsync); 60 or 30 use
     /// the engine's own limiter.

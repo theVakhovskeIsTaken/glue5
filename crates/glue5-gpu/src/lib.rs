@@ -59,6 +59,10 @@ pub struct Settings {
     /// Compile pipelines when first drawn, on the command thread (no draws
     /// skipped while compiling; hitches instead).
     pub sync_pipelines: bool,
+    /// End the game (through the application's exit) when its GPU dies on
+    /// it: a queue whose submissions never finish, or frames that stop
+    /// coming.
+    pub exit_on_lost_gpu: bool,
     /// Every n-th presented frame to a PNG in `shot_dir` (0: never).
     pub shot_every: u32,
     pub shot_dir: Option<PathBuf>,
@@ -71,7 +75,7 @@ impl Settings {
     }
 
     pub fn new(shader_dir: PathBuf) -> Settings {
-        Settings { shader_dir, cache_dir: None, sync_pipelines: false, shot_every: 0, shot_dir: None }
+        Settings { shader_dir, cache_dir: None, sync_pipelines: false, shot_every: 0, shot_dir: None, exit_on_lost_gpu: true }
     }
 }
 
@@ -303,7 +307,8 @@ impl Device {
         log::info!("gpu: {} ({:?}, {}), features {:?}", info.name, info.backend, info.driver_info, features);
         device.on_uncaptured_error(error_handler(None));
         device.set_device_lost_callback(|reason, message| {
-            if !matches!(reason, wgpu::DeviceLostReason::Destroyed) {
+            log::error!("gpu: device lost ({reason:?}): {message}");
+            if !matches!(reason, wgpu::DeviceLostReason::Destroyed) && crate::perf::exit_on_lost() {
                 glue5_runtime::exit::fail(format!("the GPU device was lost ({reason:?}): {message}"));
             }
         });
@@ -386,6 +391,7 @@ fn init(ring: GpuRing, settings: Settings, screen: Option<Screen>) -> Result<exe
 
     let profiler = profile.then(|| profile::Profiler::new(&device, &queue));
     let gpu_timer = perf::GpuTimer::new(&device, &queue);
+    crate::perf::set_exit_on_lost(settings.exit_on_lost_gpu);
     let budget = glue5_runtime::memory::gpu_budget();
     crate::perf::set_gpu_budget(budget);
     let budget = (budget != 0).then_some(budget);

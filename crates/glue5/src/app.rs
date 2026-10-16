@@ -290,6 +290,7 @@ impl App {
             // never come): the polls the renderer waits on succeed, so the
             // frames themselves are the only witness left.
             if MOBILE
+                && self.settings.exit_on_lost_gpu
                 && self.game.is_some()
                 && !self.lifecycle.background.load(Ordering::Relaxed)
                 && glue5_gpu::perf::since_present().is_some_and(|ago| ago >= std::time::Duration::from_secs(15))
@@ -551,6 +552,7 @@ impl App {
         let Some(game_dir) = self.game_dir.clone() else { return Ok(()) };
         let mut gpu_settings = glue5_gpu::Settings::for_game(&game_dir);
         gpu_settings.cache_dir = Some(self.user_dir.join("cache"));
+        gpu_settings.exit_on_lost_gpu = self.settings.exit_on_lost_gpu;
         let Some(screen) = self.screen.as_mut() else { return Ok(()) };
         self.play_requested = !screen.prepare(&gpu_settings);
         if self.play_requested {
@@ -596,6 +598,7 @@ impl App {
                 start_mode: if self.mode == Mode::Sandbox { 2 } else { 1 },
                 benchmark: self.mode == Mode::Benchmark,
                 low_memory: s.low_memory,
+                limit_gpu_memory: s.limit_gpu_memory,
                 gpu_budget_mb: s.gpu_budget_mb,
                 max_fps: s.max_fps,
                 online: (self.mode == Mode::Online)

@@ -518,7 +518,12 @@ pub(super) fn settings_page(
 ) -> bool {
     sheet(ctx, "settings-window", "SETTINGS", |ui| {
         let scale = theme::density(ui);
-        let tabs = [(SettingsTab::Video, "VIDEO"), (SettingsTab::Controls, "CONTROLS"), (SettingsTab::Game, "GAME")];
+        let tabs = [
+            (SettingsTab::Video, "VIDEO"),
+            (SettingsTab::Controls, "CONTROLS"),
+            (SettingsTab::Game, "GAME"),
+            (SettingsTab::Experimental, "EXPERIMENTAL"),
+        ];
         segmented(ui, tab, &tabs, 40.0 * scale);
         ui.add_space(10.0 * scale);
         if let Some(note) = note {
@@ -785,6 +790,24 @@ fn settings_items(
                 }
             });
         }
+        SettingsTab::Experimental => {
+            setting(
+                ui,
+                "Limit GPU memory",
+                Control::Toggle,
+                next_start(started.is_some()),
+                |ui| toggle(ui, &mut settings.limit_gpu_memory),
+            )
+            .on_hover_text("The engine's streaming evicts toward the memory budget and new textures wait for it. Off: no budget anywhere, as before.");
+            setting(
+                ui,
+                "Exit on a lost GPU",
+                Control::Toggle,
+                None,
+                |ui| toggle(ui, &mut settings.exit_on_lost_gpu),
+            )
+            .on_hover_text("When the GPU's queue dies or its frames stop coming, end the game with the reason. Off: it stays on its last frame for the logs.");
+        }
     }
 }
 
@@ -836,7 +859,7 @@ mod tests {
             theme::install(&ctx);
             let screen = Rect::from_min_size(Pos2::ZERO, size);
             let mut settings = Settings::default();
-            for tab in [SettingsTab::Video, SettingsTab::Controls, SettingsTab::Game] {
+            for tab in [SettingsTab::Video, SettingsTab::Controls, SettingsTab::Game, SettingsTab::Experimental] {
                 let mut tab = tab;
                 for _ in 0..4 {
                     let mut output = ctx.run_ui(
