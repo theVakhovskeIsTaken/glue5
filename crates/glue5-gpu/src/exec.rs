@@ -253,6 +253,8 @@ pub struct Gpu {
     /// The device memory (textures, buffers) kept under, or None.
     pub budget: Option<u64>,
     pub budget_stall: Instant,
+    /// The textures' and buffers' bytes, as the statistics count them.
+    pub device_bytes: u64,
     /// The counters at the last frame, for the performance overlay.
     pub perf: crate::perf::Mark,
     pub gpu_timer: crate::perf::GpuTimer,
@@ -748,6 +750,7 @@ impl Gpu {
                 present: None,
             })),
         );
+        self.device_bytes += bytes;
     }
 
     fn create_buffer(&mut self, id: u32, size: u32, bind: u32, misc: u32, stride: u32) {
@@ -775,6 +778,7 @@ impl Gpu {
         } else if needs_gpu {
             gpu = Some(self.new_gpu_buffer(bytes, usage));
         }
+        let counted = gpu.is_some();
         self.next_buffer_uid += 1;
         self.objs.insert(
             id,
@@ -795,6 +799,9 @@ impl Gpu {
                 counter: None,
             })),
         );
+        if counted {
+            self.device_bytes += bytes;
+        }
     }
 
     /// A buffer the engine destroyed (see `recycle.rs`), else a new one.
@@ -1091,15 +1098,23 @@ impl Gpu {
         // What decides program variants may have gone with it.
         self.formats_seen.iter_mut().for_each(|n| *n += 1);
         match self.objs.remove(id) {
-            Some(Obj::Texture(t)) => match t.recycle {
-                Some(key) => self.recycler.keep_texture(self.epoch, key, t.tex, t.bytes),
-                None => self.graveyard.push(Grave::Texture(t.tex)),
-            },
-            Some(Obj::Buffer(b)) => match (b.slot, b.gpu) {
-                (Some(slot), _) => self.slabs.free(self.epoch, slot),
-                (None, Some(g)) => self.recycler.keep_buffer(self.epoch, g),
-                (None, None) => {}
-            },
+            Some(Obj::Texture(t)) => {
+                self.device_bytes = self.device_bytes.saturating_sub(t.bytes);
+                match t.recycle {
+                    Some(key) => self.recycler.keep_texture(self.epoch, key, t.tex, t.bytes),
+                    None => self.graveyard.push(Grave::Texture(t.tex)),
+                }
+            }
+            Some(Obj::Buffer(b)) => {
+                if b.gpu.is_some() {
+                    self.device_bytes = self.device_bytes.saturating_sub(b.bytes);
+                }
+                match (b.slot, b.gpu) {
+                    (Some(slot), _) => self.slabs.free(self.epoch, slot),
+                    (None, Some(g)) => self.recycler.keep_buffer(self.epoch, g),
+                    (None, None) => {}
+                }
+            }
             _ => {}
         }
     }
@@ -1284,28 +1299,20 @@ impl Gpu {
     /// frames slow and holds back, as the browser build's did.
     fn throttle_gpu_budget(&mut self) {
         let Some(budget) = self.budget else { return };
-        let [textures, buffers] = self.gpu_bytes();
-        if textures + buffers <= budget || self.budget_stall.elapsed() < Duration::from_millis(100) {
+        if self.device_bytes <= budget || self.budget_stall.elapsed() < Duration::from_millis(100) {
             return;
         }
         self.budget_stall = Instant::now();
         self.stats.budget_stalls += 1;
         self.flush("budget");
-        // The engine's eviction (its resource heap, budgeted with ours)
-        // needs the ring running: a short wait, only for what this flush
-        // can free.
-        let deadline = Instant::now() + Duration::from_millis(50);
-        while Instant::now() < deadline {
-            std::thread::sleep(Duration::from_millis(2));
-            let [textures, buffers] = self.gpu_bytes();
-            if textures + buffers <= budget {
-                return;
-            }
-        }
+        // A burst above the budget waits out one frame's worth of releases:
+        // the engine's streaming, gated by its own budget, evicts into the
+        // room freed.
+        std::thread::sleep(Duration::from_millis(20));
         crate::log_once("gpu budget", || {
             format!(
                 "gpu: over its memory budget ({} MiB of {} MiB): frames wait while the engine evicts",
-                (textures + buffers) >> 20,
+                self.device_bytes >> 20,
                 budget >> 20
             )
         });

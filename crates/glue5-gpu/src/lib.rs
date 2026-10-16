@@ -415,6 +415,7 @@ fn init(ring: GpuRing, settings: Settings, screen: Option<Screen>) -> Result<exe
         ring,
         budget,
         budget_stall: Instant::now(),
+        device_bytes: 0,
         settings,
         objs: Default::default(),
         s: Default::default(),
