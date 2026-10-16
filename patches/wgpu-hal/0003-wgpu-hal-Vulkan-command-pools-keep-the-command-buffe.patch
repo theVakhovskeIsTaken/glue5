@@ -46,7 +46,7 @@ index 0ccb1cd..c085445 100644
              let cmd_buf_vec = unsafe {
                  self.device
                      .raw
-@@ -178,6 +179,15 @@ impl crate::CommandEncoder for super::CommandEncoder {
+@@ -178,6 +179,18 @@ impl crate::CommandEncoder for super::CommandEncoder {
          I: Iterator<Item = super::CommandBuffer>,
      {
          self.temp.clear();
@@ -55,7 +55,10 @@ index 0ccb1cd..c085445 100644
 +        // needed. wgpu-core hands its pooled encoders to any user, so
 +        // otherwise every pool grows to the biggest use of any (on Mali,
 +        // ~0.4 MB of host memory per command buffer: hundreds of MB).
-+        if !self.free.is_empty() {
++        // GLUE5_KEEP_COMMAND_BUFFERS=1 keeps them instead, upstream's way:
++        // to tell a use-after-free of recycled command memory from the
++        // savings, on a driver that faults it.
++        if std::env::var_os("GLUE5_KEEP_COMMAND_BUFFERS").is_none() && !self.free.is_empty() {
 +            unsafe { self.device.raw.free_command_buffers(self.raw, &self.free) };
 +            self.free.clear();
 +        }
