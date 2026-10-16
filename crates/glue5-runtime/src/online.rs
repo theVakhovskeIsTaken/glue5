@@ -72,6 +72,8 @@ pub(crate) fn start(online: &crate::Online, hooks: &mut glue5_game::Hooks) {
     self::hooks(hooks);
     crate::vnet::hooks(hooks);
     crate::cloud::hooks(hooks);
+    crate::jobs::hooks(hooks);
+    crate::texts::hooks(hooks);
     crate::stats::hooks(hooks);
     // The stand-ins' methods, host functions the game calls through their
     // vtables (`glue5_game::host_function`): QueryInterface, a method doing
@@ -243,6 +245,9 @@ native_results! {
     profanity_pending = 0;
     /// `SC_PROFANITY_GET_CHECK_IS_VALID`: Social Club's text check (names); every text passes.
     profanity_valid = 1;
+    /// `NETWORK_HAS_SOCIAL_CLUB_ACCOUNT`: the player has one (the pause
+    /// menu's Creator needs it).
+    social_club_account = 1;
 }
 
 /// Hook for `CNetwork::CanAccessNetworkFeatures(eNetworkAccessArea,
@@ -409,8 +414,105 @@ pub(crate) unsafe extern "C" fn offline_name(env: *mut Env, name: u64) -> u32 {
     1
 }
 
+/// `rlNetworkMode`s: Rockstar's network, the LAN (the lobby, vnet.rs).
+const NETWORK_ONLINE: u32 = 1;
+const NETWORK_LAN: u32 = 2;
+
+/// Rockstar's network is the lobby's LAN here: the transition sessions
+/// that jobs are played in are hosted and joined online whatever the
+/// game's mode (`CNetworkSession::HostTransition`).
+fn on_lan(mode: u32) -> u32 {
+    if mode == NETWORK_ONLINE { NETWORK_LAN } else { mode }
+}
+
+/// Hooks for `rage::snSession::Host(int, rlNetworkMode, ...)` and
+/// `Join(int, rlSessionInfo const&, rlNetworkMode, ...)`: on the LAN.
+#[allow(clippy::too_many_arguments)]
+pub(crate) unsafe extern "C" fn session_host(
+    env: *mut Env,
+    session: u64,
+    gamer: u32,
+    mode: u32,
+    public_slots: u32,
+    private_slots: u32,
+    attributes: u64,
+    flags: u32,
+    data: u64,
+    size: u32,
+    status: u64,
+) -> u32 {
+    let mode = on_lan(mode);
+    unsafe { orig::session_host(env, session, gamer, mode, public_slots, private_slots, attributes, flags, data, size, status) }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) unsafe extern "C" fn session_join(
+    env: *mut Env,
+    session: u64,
+    gamer: u32,
+    info: u64,
+    mode: u32,
+    slot: u32,
+    flags: u32,
+    data: u64,
+    size: u32,
+    group: u64,
+    group_size: u32,
+    status: u64,
+) -> u32 {
+    let mode = on_lan(mode);
+    unsafe { orig::session_join(env, session, gamer, info, mode, slot, flags, data, size, group, group_size, status) }
+}
+
+/// Hooks for `rage::rlSessionFinder::Find(int, rlNetworkMode, ...)` and
+/// the two `rlSessionManager::QueryDetail(rlNetworkMode, ...)`: finding
+/// and asking about sessions (a job's, joined or looked for), on the LAN.
+#[allow(clippy::too_many_arguments)]
+pub(crate) unsafe extern "C" fn session_find(
+    env: *mut Env,
+    gamer: u32,
+    mode: u32,
+    a: u32,
+    b: u32,
+    filter: u64,
+    details: u64,
+    c: u32,
+    found: u64,
+    status: u64,
+) -> u32 {
+    unsafe { orig::session_find(env, gamer, on_lan(mode), a, b, filter, details, c, found, status) }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) unsafe extern "C" fn session_query(
+    env: *mut Env,
+    mode: u32,
+    a: u32,
+    b: u32,
+    c: u32,
+    d: u32,
+    e: u32,
+    infos: u64,
+    count: u32,
+    gamer: u64,
+    details: u64,
+    found: u64,
+    status: u64,
+) -> u32 {
+    unsafe { orig::session_query(env, on_lan(mode), a, b, c, d, e, infos, count, gamer, details, found, status) }
+}
+
+pub(crate) unsafe extern "C" fn session_query_any(env: *mut Env, mode: u32, a: u32, b: u64, c: u64, d: u64, e: u64) -> u32 {
+    unsafe { orig::session_query_any(env, on_lan(mode), a, b, c, d, e) }
+}
+
 /// This module's hooks, online.
 pub(crate) fn hooks(hooks: &mut glue5_game::Hooks) {
+    hooks.session_host = Some(session_host);
+    hooks.session_join = Some(session_join);
+    hooks.session_find = Some(session_find);
+    hooks.session_query = Some(session_query);
+    hooks.session_query_any = Some(session_query_any);
     hooks.rl_gamer_handle = Some(gamer_handle);
     hooks.rl_offline_name = Some(offline_name);
     hooks.live_manager_init = Some(live_manager_init);
@@ -425,6 +527,7 @@ pub(crate) fn hooks(hooks: &mut glue5_game::Hooks) {
     hooks.profanity_status = Some(profanity_status);
     hooks.profanity_pending = Some(profanity_pending);
     hooks.profanity_valid = Some(profanity_valid);
+    hooks.social_club_account = Some(social_club_account);
     hooks.script_program_loaded = Some(script_program_loaded);
     hooks.presence_online = Some(presence_online);
     hooks.can_enter_multiplayer = Some(can_enter_multiplayer);

@@ -11,6 +11,7 @@ glue5-game.workspace = true
 anyhow.workspace = true
 log.workspace = true
 sha2.workspace = true
+serde_json.workspace = true
 # /dev/urandom for the engine, which Windows does not have.
 getrandom = "0.4"
 # The system's time zone, the same way on every platform.

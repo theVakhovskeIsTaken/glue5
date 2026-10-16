@@ -8,3 +8,9 @@ MACOSX_DEPLOYMENT_TARGET = "14.0"
 # iOS devices: the oldest CPU iOS 16.4 runs on (A11) instead of the A7 default.
 [target.aarch64-apple-ios]
 rustflags = ["-Ctarget-cpu=apple-a11"]
+
+# Android: ARMv8.2 (as the game's C, see glue5-game/build/main.rs) instead of
+# the ARMv8.0 default; Rust has no stable v8.2a feature, so its parts that
+# code generation uses: LSE atomics, RDM and CRC.
+[target.aarch64-linux-android]
+rustflags = ["-Ctarget-feature=+lse,+rdm,+crc"]

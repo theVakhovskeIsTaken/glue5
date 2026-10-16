@@ -28,7 +28,9 @@ Emscripten/WASI imports, threads, file access, input, audio and GPU support.
 
 **Status:** the story mode runs on macOS and iOS devices (wgpu on Metal,
 with sound); keyboard, mouse, gamepads and touch controls work. The
-Android app builds (wgpu on Vulkan); it has not run on a device yet.
+Android app builds (wgpu on Vulkan); it has not run on a device yet. The
+Linux build and AppImage (wgpu on Vulkan, X11 and Wayland) are set up but
+not yet built or run.
 
 See [design.md](docs/design.md) for architecture, tradeoffs and known limits.
 
@@ -51,7 +53,8 @@ See [design.md](docs/design.md) for architecture, tradeoffs and known limits.
 | `platform/ios` | What iOS needs around it: `main.c`, entitlements, the xcodegen spec. |
 | `platform/android` | The Gradle project around it: manifest, the activity (SDL's, subclassed), the adaptive icon. |
 | `platform/macos` | Extra bundle metadata; cargo-packager configuration lives in `crates/glue5/Cargo.toml`. |
-| `.mise` | [mise]: the toolchain (`config.toml`) and the developer tasks (`tasks/`): setup, desktop, iOS and Android. |
+| `platform/linux` | The container the AppImage is built in (`Dockerfile`). |
+| `.mise` | [mise]: the toolchain (`config.toml`) and the developer tasks (`tasks/`): setup, desktop, iOS, Android and Linux. |
 | `patches` | Our patches to wasm2c, wgpu, wgpu-core, wgpu-hal and sp-fidelity, applied by `mise run setup` ([README](patches/README.md)). |
 | `third_party/wabt` | wasm2c's sources, pinned (a submodule). `third_party/wgpu`, `third_party/wgpu-core`, `third_party/wgpu-hal` and `third_party/sp-fidelity`, the patched crates, are made by setup and not in git. |
 
@@ -62,8 +65,8 @@ build.
 
 ## Building
 
-Requirements: [mise] and a C/C++ compiler; for iOS, Xcode; for Windows,
-[see below](#windows). mise installs
+Requirements: [mise] and a C/C++ compiler; for iOS, Xcode; for Windows
+and Linux, [see below](#windows). mise installs
 Rust, CMake and [xcodegen] (`.mise/config.toml`) on first use, and for
 Android the JDK, Gradle, the SDK's command-line tools and cargo-ndk; the
 Android tasks install the SDK packages they need (platform, build tools,
@@ -101,6 +104,28 @@ sources. Link the game directory with a junction
 (`New-Item -ItemType Junction game -Target <dir>`) or set `GLUE5_GAME_DIR`.
 Rendering is wgpu on Vulkan: the GPU driver provides it.
 
+### Linux
+
+Clang compiles the game's generated C (`CC` overrides it), and SDL is built
+against the headers of the backends it supports: install them before the
+first build, or SDL leaves those out (no window without X11 or Wayland's).
+On Debian and Ubuntu, the list in `platform/linux/Dockerfile`; on other
+distributions, SDL's `docs/README-linux.md`. SDL loads X11 or Wayland
+(Wayland when the compositor has `fifo-v1`, X11 or XWayland otherwise;
+`SDL_VIDEO_DRIVER=x11` or `wayland` forces one), the sound server and udev
+at run time. Rendering is wgpu on Vulkan, from the GPU driver.
+
+`mise run linux:package` builds `target/package/glue5_<version>_<arch>.AppImage`
+with cargo-packager (it downloads linuxdeploy on first use). The AppImage
+holds the executable and the icon only: glibc, Vulkan and the libraries SDL
+loads are the system's, so it runs on systems with the glibc it was built
+against or later. `mise run linux:container [x86_64|aarch64]` builds it in
+`platform/linux/Dockerfile` (Ubuntu 22.04, glibc 2.35) with Docker, from any
+system, its build tree in `target/linux-<arch>`. Give Docker the memory for
+up to eight C compilations of ~15 MB files at once.
+
+The game is looked for in `game/` beside the AppImage, as beside the Mac app.
+
 ## Tasks
 
 | What | Command |
@@ -110,6 +135,8 @@ Rendering is wgpu on Vulkan: the GPU driver provides it.
 | macOS: build only the app bundle | `mise run macos:build` |
 | macOS: open the built app again | `mise run macos:run` |
 | macOS: build a distributable disk image | `mise run macos:package` |
+| Linux: build the AppImage (on Linux) | `mise run linux:package` |
+| Linux: build the AppImage in a container (Docker), on any system | `mise run linux:container [x86_64\|aarch64]` |
 | Run without a window: scripted input, PNG shots, statistics | `mise run headless --press 30 start --for 40 --shots 300 shots` (`mise run headless -- --help` lists the options) |
 | Tests | `mise run test`; every translated shader through the adapter and naga's validator: `mise run test:shaders` |
 | Merge recorded pipelines into the app's seed | `mise run shaders:seed <pipelines.jsonl>...` |
@@ -133,7 +160,8 @@ its serial number (`adb devices`).
 `mise run macos:build` creates `target/package/Glue 5.app` for the Mac's
 architecture; `mise run macos:package` also creates a DMG in `target/package`.
 These tasks require Xcode 26+ for the shared Icon Composer icon. mise manages
-cargo-packager alongside the other tools in `.mise/config.toml` on macOS.
+cargo-packager alongside the other tools in `.mise/config.toml` on macOS
+and Linux.
 Direct Cargo builds and the packaged app both target macOS 14+, configured in
 `.cargo/config.toml`. There is no bundle signing, Developer ID or notarization
 step; the executable retains the linker-generated ad-hoc signature on Apple

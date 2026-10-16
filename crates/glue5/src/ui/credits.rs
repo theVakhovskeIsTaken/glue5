@@ -14,6 +14,12 @@ const PROJECTS: &[(&str, &str, &str, &str)] = &[
     ("sdl3-rs", "SDL from Rust", "MIT", "https://github.com/vhspace/sdl3-rs"),
     ("egui", "This interface", "MIT / Apache-2.0", "https://github.com/emilk/egui"),
     ("Barlow", "Typeface, by Jeremy Tribby", "SIL OFL 1.1", "https://github.com/jpt/barlow"),
+    (
+        "game-icons.net",
+        "Touch icons, by Lorc, Delapouite, John Colburn, Skoll, Guard13007 and DarkZaitzev",
+        "CC BY 3.0",
+        "https://game-icons.net",
+    ),
     ("etcpak", "Textures for GPUs without BC", "BSD-3-Clause", "https://github.com/wolfpld/etcpak"),
     ("bcdec_rs", "Texture decoding", "MIT", "https://github.com/ScanMountGoat/image_dds"),
     #[cfg(target_vendor = "apple")]

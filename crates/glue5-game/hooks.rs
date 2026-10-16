@@ -17,6 +17,7 @@ pub const HOOKS: &[&[(&str, &str)]] = &[
     include!("hooks/exit.rs"),
     include!("hooks/gamelog.rs"),
     include!("hooks/memory.rs"),
+    include!("hooks/files.rs"),
     include!("hooks/skin.rs"),
     include!("hooks/shader_settings.rs"),
     include!("hooks/shadow_reveal.rs"),
@@ -31,6 +32,9 @@ pub const HOOKS: &[&[(&str, &str)]] = &[
     include!("hooks/online.rs"),
     include!("hooks/vnet.rs"),
     include!("hooks/cloud.rs"),
+    include!("hooks/jobs.rs"),
+    include!("hooks/texts.rs"),
     include!("hooks/stats.rs"),
     include!("hooks/upscale.rs"),
+    include!("hooks/boot_screen.rs"),
 ];

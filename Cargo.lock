@@ -780,6 +780,7 @@ dependencies = [
  "jiff",
  "libc",
  "log",
+ "serde_json",
  "sha2",
  "windows-sys",
 ]

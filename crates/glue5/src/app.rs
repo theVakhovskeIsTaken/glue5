@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Result, anyhow};
 use glue5_gpu::{Presentation, Screen, Upscaler};
@@ -25,7 +25,7 @@ use sdl3::mouse::MouseButton;
 use crate::haptics;
 use crate::paths::{self, MOBILE};
 use crate::settings::{self, PerfOverlay, Settings, TouchMode, Upscaling};
-use crate::touch::Touch;
+use crate::touch::{self, Touch};
 use crate::ui::{self, Action, Mode, Page, Started, Status, Ui};
 use crate::{audio, benchmark, keymap, pads};
 
@@ -36,6 +36,11 @@ const GEAR_ALONE: f32 = 0.35;
 /// In the user directory: why the last game stopped, for the start page
 /// (gone once the game is started again).
 const FAILURE_FILE: &str = "last-failure.txt";
+/// How long the pointer waits to be captured once it should be (`App::pointer`).
+const CAPTURE_DELAY: Duration = Duration::from_millis(150);
+
+/// Esc's Windows virtual-key code: back, in the game's menus.
+const VK_ESCAPE: u8 = 0x1B;
 
 pub fn run() -> Result<()> {
     // SDL's event wait on Android pumps events, which queues the poll
@@ -150,6 +155,7 @@ pub fn run() -> Result<()> {
         touch: Touch::new(),
         touch_input: MOBILE,
         touch_shown: false,
+        touch_mouse: Default::default(),
         lifecycle,
         folder: None,
         game_dir: None,
@@ -164,6 +170,8 @@ pub fn run() -> Result<()> {
         play_requested: false,
         mode,
         benchmark: last_benchmark,
+        capture_since: None,
+        mouse_used: !MOBILE,
         game: None,
     };
     app.last_failure = std::fs::read_to_string(app.user_dir.join(FAILURE_FILE)).ok();
@@ -235,6 +243,9 @@ struct App {
     /// not enough, phones often have a paired controller lying around).
     touch_input: bool,
     touch_shown: bool,
+    /// What the touch controls last did with the mouse and Esc (the pause
+    /// menu's).
+    touch_mouse: touch::Mouse,
     lifecycle: Arc<Lifecycle>,
     folder: Option<FolderPick>,
     /// The game's folder, once found.
@@ -261,6 +272,10 @@ struct App {
     mode: Mode,
     /// The last benchmark's results.
     benchmark: Option<benchmark::Results>,
+    /// Since when the pointer should be captured (see `pointer`).
+    capture_since: Option<Instant>,
+    /// A mouse has been used in the game: phones capture it only then.
+    mouse_used: bool,
     game: Option<Running>,
 }
 
@@ -385,6 +400,7 @@ impl App {
             return false;
         }
         match event {
+            Event::MouseButtonDown { .. } => self.mouse_used = true,
             Event::FingerDown { finger_id, x, y, .. } => self.touch.finger_down(finger_id, x, y),
             Event::FingerMotion { finger_id, x, y, .. } => self.touch.finger_motion(finger_id, x, y),
             Event::FingerUp { finger_id, .. } => self.touch.finger_up(finger_id),
@@ -393,7 +409,7 @@ impl App {
         if let Some(game) = &self.game
             && let Some(input) = &game.input
         {
-            game_input(input, &event, &self.window, &self.mouse, game.back_buffer);
+            game_input(input, &event, &self.window, game.back_buffer);
         }
         false
     }
@@ -414,11 +430,52 @@ impl App {
             self.touch_shown = show;
             self.touch.clear();
             glue5_runtime::input::set_gamepad(0, Gamepad::default());
+            if let Some(input) = self.game.as_ref().and_then(|g| g.input.as_ref()) {
+                if self.touch_mouse.down {
+                    input.mouse_button(mouse::LEFT, false);
+                }
+                if self.touch_mouse.back {
+                    input.key(VK_ESCAPE, false);
+                }
+            }
+            self.touch_mouse = Default::default();
         }
+        glue5_runtime::input::set_touch_play(show);
+        glue5_runtime::input::set_touch_targeting(self.settings.touch_aim.targeting());
         if show {
             self.touch.haptics = self.settings.haptics;
+            self.touch.camera_speed = self.settings.touch_camera;
+            self.touch.aim_locked = glue5_runtime::input::aim_locked();
             self.touch.layout(ui::screen_size(&self.window), ui::safe_rect(&self.window), self.settings.touch_size);
+            self.touch.set_context(glue5_runtime::input::player_context());
             glue5_runtime::input::set_gamepad(0, self.touch.gamepad());
+            let look = self.touch.take_look();
+            let mouse = self.touch.take_mouse();
+            if let Some(game) = &self.game
+                && let Some(input) = &game.input
+            {
+                // The camera, dragged: as a mouse turns it.
+                if look != (0, 0) {
+                    input.mouse_motion(look.0, look.1);
+                }
+                // The pause menu: a finger is the mouse.
+                if mouse.at != self.touch_mouse.at
+                    && let Some(at) = mouse.at
+                {
+                    let (w, h) = game.back_buffer;
+                    input.mouse_position((at.x * w as f32) as i32, (at.y * h as f32) as i32);
+                }
+                if mouse.down != self.touch_mouse.down {
+                    input.mouse_button(mouse::LEFT, mouse.down);
+                }
+                if mouse.wheel != 0 {
+                    input.mouse_wheel(mouse.wheel);
+                }
+                if mouse.back != self.touch_mouse.back {
+                    input.key(VK_ESCAPE, mouse.back);
+                }
+                self.touch_mouse = mouse;
+            }
             if self.settings.haptics {
                 haptics::rumble(glue5_runtime::input::rumble(0));
             }
@@ -503,10 +560,6 @@ impl App {
             if let Some(input) = self.game.as_ref().and_then(|g| g.input.as_ref()) {
                 // Nothing stays pressed in the game behind a page.
                 input.release_all();
-                if page.is_some() {
-                    self.mouse.set_relative_mouse_mode(&self.window, false);
-                    input.pointer_locked(false);
-                }
             }
             if page_before == Some(Page::Settings) {
                 self.settings.save(&self.user_dir);
@@ -529,7 +582,40 @@ impl App {
                 self.text_input.stop(&self.window);
             }
         }
+        self.pointer();
         Ok(false)
+    }
+
+    /// The mouse pointer, as the game has it on PC: captured in play (hidden,
+    /// every motion reaching the game); free while the game shows its own
+    /// cursor (the pause menu and its map, the phone's browser, ...), the
+    /// system's hidden over the window then, as the game draws its own; free
+    /// and shown while the window is not in front or a page of ours is
+    /// open. It follows these as they change: Esc frees it with the pause
+    /// menu and captures it again on leaving it, as does switching to
+    /// another window and back; no click is needed.
+    fn pointer(&mut self) {
+        // Touch alone (phones without a mouse): nothing to do.
+        if !self.mouse_used {
+            return;
+        }
+        let Some(input) = self.game.as_ref().and_then(|g| g.input) else { return };
+        let ours = self.ui.is_open() || !self.window.has_input_focus();
+        let game_cursor = input.cursor_shown();
+        let want = !ours && !game_cursor && self.mode != Mode::Benchmark;
+        // Capturing waits a moment: back in front over a menu, the game
+        // shows its cursor only a frame or two later.
+        self.capture_since = want.then(|| self.capture_since.unwrap_or_else(Instant::now));
+        let capture = self.capture_since.is_some_and(|t| t.elapsed() >= CAPTURE_DELAY);
+        let captured = self.mouse.relative_mouse_mode(&self.window);
+        if captured != capture && (capture || !want) {
+            self.mouse.set_relative_mouse_mode(&self.window, capture);
+            input.pointer_locked(capture);
+        }
+        let shown = ours || !game_cursor;
+        if self.mouse.is_cursor_showing() != shown {
+            self.mouse.show_cursor(shown);
+        }
     }
 
     /// The game's back buffer follows the window and the render scale: asked
@@ -664,6 +750,7 @@ impl App {
         }
         self.settings.save(&self.user_dir);
         self.mouse.set_relative_mouse_mode(&self.window, false);
+        self.mouse.show_cursor(true);
         let page = if MOBILE { "when the app is opened again, its start page" } else { "the start page" };
         let text = format!(
             "The game has stopped: {why}.\n\nIf it stops again at the same point, one of its graphics settings \
@@ -837,16 +924,11 @@ fn game_input(
     input: &InputBlock,
     event: &Event,
     window: &sdl3::video::Window,
-    mouse_util: &sdl3::mouse::MouseUtil,
     back_buffer: (u32, u32),
 ) {
     let (bw, bh) = (back_buffer.0 as f32, back_buffer.1 as f32);
     match *event {
         Event::KeyDown { scancode: Some(sc), repeat, .. } => {
-            if sc == Scancode::Escape && mouse_util.relative_mouse_mode(window) {
-                mouse_util.set_relative_mouse_mode(window, false);
-                input.pointer_locked(false);
-            }
             if !repeat {
                 key(input, sc, true);
             }
@@ -863,22 +945,11 @@ fn game_input(
             input.mouse_position((x * bw / ww as f32) as i32, (y * bh / wh as f32) as i32);
             input.mouse_motion(xrel.round() as i32, yrel.round() as i32);
         }
-        Event::MouseButtonDown { mouse_btn, .. } => {
-            // Like the page: a click captures the pointer.
-            if !mouse_util.relative_mouse_mode(window) {
-                mouse_util.set_relative_mouse_mode(window, true);
-                input.pointer_locked(true);
-            }
-            input.mouse_button(mouse_bit(mouse_btn), true);
-        }
+        Event::MouseButtonDown { mouse_btn, .. } => input.mouse_button(mouse_bit(mouse_btn), true),
         Event::MouseButtonUp { mouse_btn, .. } => input.mouse_button(mouse_bit(mouse_btn), false),
         Event::MouseWheel { y, .. } => input.mouse_wheel(y.round() as i32),
         Event::Window { win_event: WindowEvent::FocusGained, .. } => input.focus(true),
-        Event::Window { win_event: WindowEvent::FocusLost, .. } => {
-            mouse_util.set_relative_mouse_mode(window, false);
-            input.pointer_locked(false);
-            input.focus(false);
-        }
+        Event::Window { win_event: WindowEvent::FocusLost, .. } => input.focus(false),
         _ => {}
     }
 }

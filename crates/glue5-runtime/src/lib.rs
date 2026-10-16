@@ -7,17 +7,20 @@
 
 pub mod audio;
 mod audio_update;
+mod boot_screen;
 mod cloud;
 pub mod cpu;
 mod device_reset;
 mod dht;
 pub mod exit;
+mod files;
 pub mod game_settings;
 mod gamer_tags;
 mod gamelog;
 pub mod gpu;
 mod granular;
 mod imports;
+mod jobs;
 pub mod input;
 pub mod memory;
 mod online;
@@ -31,6 +34,7 @@ mod shadow_reveal;
 mod script_assets;
 mod skin;
 mod stats;
+mod texts;
 mod threads;
 mod time;
 pub mod tour;
@@ -268,6 +272,7 @@ pub fn start(config: Config, gpu: gpu::GpuBackend) -> Result<Game> {
     exit::hooks(&mut hooks);
     gamelog::hooks(&mut hooks);
     memory::hooks(&mut hooks);
+    files::hooks(&mut hooks);
     skin::hooks(&mut hooks);
     shader_settings::hooks(&mut hooks);
     shadow_reveal::hooks(&mut hooks);
@@ -280,6 +285,7 @@ pub fn start(config: Config, gpu: gpu::GpuBackend) -> Result<Game> {
     scenario::hooks(&mut hooks);
     tour::hooks(&mut hooks);
     upscale::hooks(&mut hooks);
+    boot_screen::hooks(&mut hooks);
     if let Some(online) = &rt().config.online {
         online::start(online, &mut hooks);
     }

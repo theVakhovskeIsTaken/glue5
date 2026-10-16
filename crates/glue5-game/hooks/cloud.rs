@@ -18,11 +18,8 @@
     ("mpstats_save_update", "CSavegameQueuedOperation_MPStats_Save::Update()"),
     ("ros_credentials_valid", "rage::rlRosCredentials::IsValid() const"),
     // Rockstar's cloud files, on the disk; the engine's grow buffers, which
-    // they are read into.
+    // they are read into (files.rs).
     ("post_member_file", "rage::rlCloud::PostMemberFile(int, rage::rlCloudOnlineService, char const*, void const*, unsigned int, rage::rlCloud::PostType, rage::rlCloudFileInfo*, rage::sysMemAllocator*, rage::netStatus*)"),
     ("get_member_file", "rage::rlCloud::GetMemberFile(int, rage::rlCloudMemberId const&, rage::rlCloudOnlineService, char const*, rage::rlRosSecurityFlags, unsigned long, rage::netHttpOptions, rage::fiDevice const*, fiHandle__*, rage::rlCloudFileInfo*, rage::sysMemAllocator*, rage::netStatus*)"),
-    // The players' creations (jobs, missions): there are none.
-    ("ugc_query_content", "rage::rlUgc::QueryContent(int, rage::rlUgcContentType, char const*, char const*, int, int, int*, int*, rage::atDelegate<void (int, char const*, rage::rlUgcMetadata const*, rage::rlUgcRatings const*, char const*, unsigned int, unsigned int, rage::rlUgcPlayer const*)> const&, rage::sysMemAllocator*, rage::netStatus*)"),
     ("grow_buffer_append", "rage::datGrowBuffer::Append(void const*, unsigned int)"),
-    ("grow_buffer_file_name", "rage::fiDevice::MakeGrowBufferFileName(char*, int, rage::datGrowBuffer*)"),
 ]

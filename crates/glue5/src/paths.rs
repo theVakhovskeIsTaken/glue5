@@ -42,6 +42,14 @@ pub fn default_game_dirs() -> Vec<PathBuf> {
         {
             dirs.push(parent.join("game"));
         }
+        // Likewise beside an AppImage: the executable runs from where it is
+        // mounted, a temporary directory; its runtime says where it is.
+        #[cfg(target_os = "linux")]
+        if let Some(appimage) = std::env::var_os("APPIMAGE").map(PathBuf::from)
+            && let Some(parent) = appimage.parent()
+        {
+            dirs.push(parent.join("game"));
+        }
         // Next to the executable, the repository's ./game (target/<profile>/glue5),
         // and the working directory.
         if let Ok(base) = sdl3::filesystem::get_base_path() {

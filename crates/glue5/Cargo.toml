@@ -14,7 +14,9 @@ identifier = "local.glue5"
 category = "Game"
 formats = ["app"]
 out-dir = "../../target/package"
-icons = ["../../target/package/macos-assets/Glue5.icns"]
+# Made by macos:build and linux:package; each system's formats take theirs
+# (an .icns on macOS, PNGs on Linux) and a missing one matches nothing.
+icons = ["../../target/package/macos-assets/Glue5.icns", "../../target/package/linux-assets/glue5.png"]
 resources = [{ src = "../../target/package/macos-assets/Assets.car", target = "Assets.car" }]
 
 [package.metadata.packager.macos]

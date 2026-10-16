@@ -7,9 +7,9 @@
 
 [tools]
 rust = { version = "stable", targets = "aarch64-apple-ios,aarch64-linux-android" }
-cmake = "4.4.1"
+cmake = "4.4.4"
 xcodegen = { version = "2.46.0", os = ["macos"] }
-"cargo:cargo-packager" = { version = "0.11.8", os = ["macos"] }
+"cargo:cargo-packager" = { version = "0.11.8", os = ["macos", "linux"] }
 # Android: the JDK and Gradle for the app's Gradle project, the SDK's
 # command-line tools (sdkmanager; the android tasks install the SDK packages
 # they need with it, in this tool's directory, which is ANDROID_HOME), and

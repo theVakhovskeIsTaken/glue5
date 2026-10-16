@@ -77,5 +77,7 @@ pub extern "C" fn SDL_main(_: std::ffi::c_int, _: *mut *mut std::ffi::c_char) ->
     // The process ends with main, as on desktop and iOS: the engine's threads
     // never end, and SDL's activity only finishes when main returns, leaving
     // them running in the process Android keeps cached.
-    std::process::exit(main())
+    let code = main();
+    glue5_runtime::qos::end();
+    std::process::exit(code)
 }

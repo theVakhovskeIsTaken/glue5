@@ -58,6 +58,10 @@ fn local_ip() -> u32 {
 
 /// A datagram from the lobby (p2p.rs) for the engine.
 pub(crate) fn deliver(from_ip: u32, from_port: u16, to_port: u16, data: &[u8]) {
+    if to_port == crate::jobs::PORT {
+        crate::jobs::receive(from_ip, data);
+        return;
+    }
     let mut sockets = SOCKETS.lock().unwrap();
     if let Some(queue) = sockets.queues.get_mut(&to_port)
         && queue.len() < QUEUE

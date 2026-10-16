@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+#MISE description="Build the Linux AppImage, without game data (on Linux; elsewhere: linux:container)"
+#MISE depends=["setup"]
+set -euo pipefail
+
+[[ $(uname -s) == Linux ]] || { echo "linux:package runs on Linux: elsewhere, mise run linux:container" >&2; exit 1; }
+
+# The shared icon's two layers, composed as Icon Composer does (the five at
+# 0.82 of the icon), on a rounded square with a margin, as Linux icons are.
+assets="$PWD/target/package/linux-assets"
+layers=platform/shared/Glue5.icon/Assets
+mkdir -p "$assets"
+magick=$(command -v magick || command -v convert) || { echo "linux:package needs ImageMagick" >&2; exit 1; }
+"$magick" "$layers/01-background.png" -resize 448x448 \
+    \( "$layers/02-five.png" -resize 367x367 \) -gravity center -composite \
+    \( -size 448x448 xc:none -fill white -draw "roundrectangle 0,0 447,447 100,100" \) -compose DstIn -composite \
+    -compose Over -background none -extent 512x512 "$assets/glue5.png"
+
+cargo build -r
+cargo packager --release --formats appimage
+echo "packaged AppImage in $PWD/target/package"

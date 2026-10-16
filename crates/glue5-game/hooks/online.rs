@@ -12,6 +12,13 @@
     // pass: the hardware bail, privileges, the prologue, the store, the
     // network features, the mugshot photo.
     ("bail_on_multiplayer", "CLiveManager::BailOnMultiplayer(eBailReason, int)"),
+    // Sessions hosted and joined on Rockstar's network (a job's transition
+    // session is, whatever the game's mode): on the lobby's LAN instead.
+    ("session_host", "rage::snSession::Host(int, rage::rlNetworkMode, int, int, rage::rlMatchingAttributes const&, unsigned int, void const*, unsigned int, rage::netStatus*)"),
+    ("session_join", "rage::snSession::Join(int, rage::rlSessionInfo const&, rage::rlNetworkMode, rage::rlSlotType, unsigned int, void const*, unsigned int, rage::rlGamerHandle const*, unsigned int, rage::netStatus*)"),
+    ("session_find", "rage::rlSessionFinder::Find(int, rage::rlNetworkMode, unsigned int, int, rage::rlMatchingFilter const&, rage::rlSessionDetail*, unsigned int, unsigned int, unsigned int*, rage::netStatus*)"),
+    ("session_query", "rage::rlSessionManager::QueryDetail(rage::rlNetworkMode, unsigned int, unsigned int, unsigned int, unsigned int, bool, rage::rlSessionInfo const*, unsigned int, rage::rlGamerHandle, rage::rlSessionDetail*, unsigned int*, rage::netStatus*)"),
+    ("session_query_any", "rage::rlSessionManager::QueryDetail(rage::rlNetworkMode, unsigned int, unsigned int, unsigned int, unsigned int, bool, rage::rlSessionInfo const*, unsigned int, rage::rlSessionDetail*, unsigned int*, rage::netStatus*)"),
     ("ros_privilege", "rage::rlRosCredentials::HasPrivilege(rage::rlRosPrivilegeId) const"),
     ("ros_privilege_end_date", "rage::rlRosCredentials::HasPrivilegeEndDate(rage::rlRosPrivilegeId, bool*, unsigned long*) const"),
     ("profile_setting_int", "CProfileSettings::GetInt(CProfileSettings::ProfileSettingId)"),
@@ -25,6 +32,7 @@
     ("profanity_valid", "socialclub_commands::SetupScriptCommands()::scrWrapped_SC_PROFANITY_GET_CHECK_IS_VALID::Call(rage::scrThread::Info&)"),
     ("profanity_pending", "socialclub_commands::SetupScriptCommands()::scrWrapped_SC_PROFANITY_GET_CHECK_IS_PENDING::Call(rage::scrThread::Info&)"),
     ("profanity_status", "socialclub_commands::SetupScriptCommands()::scrWrapped_SC_PROFANITY_GET_STRING_STATUS::Call(rage::scrThread::Info&)"),
+    ("social_club_account", "network_commands::SetupScriptCommands()::scrWrapped_NETWORK_HAS_SOCIAL_CLUB_ACCOUNT::Call(rage::scrThread::Info&)"),
     ("savemigration_mp_enabled", "savemigration_commands::SetupScriptCommands()::scrWrapped_SAVEMIGRATION_IS_MP_ENABLED::Call(rage::scrThread::Info&)"),
     ("bad_pack_order", "dlc_commands::SetupScriptCommands()::scrWrapped_GET_EVER_HAD_BAD_PACK_ORDER::Call(rage::scrThread::Info&)"),
 ]

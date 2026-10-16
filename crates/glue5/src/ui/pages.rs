@@ -4,7 +4,7 @@ use super::widgets::{
 };
 use super::{Action, Mode, Page, SettingsTab, Status, WARN, theme};
 use crate::paths::{self, MOBILE};
-use crate::settings::{self, Corner, OverlayDetail, PerfOverlay, RENDER_SCALES, Settings, TouchMode, Upscaling};
+use crate::settings::{self, Corner, OverlayDetail, PerfOverlay, RENDER_SCALES, Settings, TouchAim, TouchMode, Upscaling};
 use egui::{Align, Align2, Color32, Id, Layout, Rect, RichText, Sense, Stroke, StrokeKind, UiBuilder, pos2, vec2};
 
 /// The only platform differences are capabilities, not layout.
@@ -712,6 +712,25 @@ fn settings_items(
             setting(ui, "Opacity", Control::Slider, None, |ui| {
                 slider(ui, &mut settings.touch_opacity, 0.2..=1.0, 0.01, "%", 0)
             });
+            setting(ui, "Camera speed", Control::Slider, None, |ui| {
+                slider(ui, &mut settings.touch_camera, 0.25..=3.0, 0.05, "×", 2)
+            });
+            setting(ui, "Aim assist", Control::Choice, None, |ui| {
+                choice(
+                    ui,
+                    &mut settings.touch_aim,
+                    &[
+                        (TouchAim::LockOn, "Lock-on"),
+                        (TouchAim::Snap, "Snap"),
+                        (TouchAim::SlowDown, "Slow-down"),
+                        (TouchAim::Off, "Off"),
+                    ],
+                )
+            })
+            .on_hover_text(
+                "Lock-on: aiming locks on to the nearest target and follows it. Snap: aiming snaps to the target, \
+                 then you aim. Slow-down: the camera slows down over targets. Off: free aim",
+            );
             if crate::haptics::SUPPORTED {
                 setting(ui, "Haptics", Control::Toggle, None, |ui| toggle(ui, &mut settings.haptics));
             }
