@@ -7,6 +7,7 @@
 
 pub mod audio;
 mod audio_update;
+mod bink;
 mod boot_screen;
 mod cloud;
 pub mod cpu;
@@ -286,6 +287,7 @@ pub fn start(config: Config, gpu: gpu::GpuBackend) -> Result<Game> {
     tour::hooks(&mut hooks);
     upscale::hooks(&mut hooks);
     boot_screen::hooks(&mut hooks);
+    bink::hooks(&mut hooks);
     if let Some(online) = &rt().config.online {
         online::start(online, &mut hooks);
     }

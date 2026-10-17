@@ -57,7 +57,8 @@ android_apk() {
     # SDL's Java side, from the sdl3-src crate the libraries were built with.
     local sdl
     sdl=$(cargo metadata --format-version 1 --locked |
-        grep -o '"manifest_path":"[^"]*/sdl3-src-[^"/]*/Cargo.toml"' | head -1 | cut -d'"' -f4)
+        grep -o '"manifest_path":"[^"]*sdl3-src-[^"/]*Cargo.toml"' | head -1 | cut -d'"' -f4 |
+        sed 's|\\\\|/|g')
     [ -n "$sdl" ] || die "sdl3-src is not among the dependencies"
     gradle -p "$project" --project-cache-dir "$out/gradle-cache" --quiet \
         "-Pglue5.sdlJava=${sdl%/Cargo.toml}/SDL/android-project/app/src/main/java" assembleRelease

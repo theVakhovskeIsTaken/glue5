@@ -142,6 +142,10 @@ pub struct Stats {
     /// Render passes ended, by the command that ended them.
     pub pass_ends: FxHashMap<u32, u64>,
     pub skipped: FxHashMap<&'static str, u64>,
+    /// Raw command counts, by opcode (TEMP DIAGNOSTIC).
+    pub op_counts: FxHashMap<u32, u64>,
+    /// UPLOAD_TEXTURE commands whose texture object was missing (TEMP DIAGNOSTIC).
+    pub upload_drops: u64,
     pub pending_skips: u64,
     pub clamped: u64,
     pub dispatches: u64,
@@ -343,6 +347,10 @@ impl Gpu {
 
     fn execute(&mut self, c: Command) {
         self.op = c.op;
+        // TEMP DIAGNOSTIC: raw per-opcode counts.
+        if matches!(c.op, op::CREATE_TEXTURE | op::UPLOAD_BUFFER | op::UPLOAD_TEXTURE | op::COPY_REGION | op::COPY_RESOURCE) {
+            *self.stats.op_counts.entry(c.op).or_default() += 1;
+        }
         match c.op {
             op::NOP | op::INIT => {}
             op::CREATE_TEXTURE => self.create_texture(&c),
@@ -409,6 +417,10 @@ impl Gpu {
             }
             op::CREATE_STATE => self.create_state(&c),
             op::CREATE_SRV | op::CREATE_UAV => {
+                // TEMP DIAGNOSTIC: SRVs over the movie textures.
+                if c.op == op::CREATE_SRV && matches!(c.w(2), 1234 | 1236 | 1238 | 1242 | 1244 | 1246) {
+                    log::info!("[gpu-op] create srv {} over tex {} fmt {} dim {} view [{},{},{},{}]", c.w(0), c.w(2), c.w(3), c.w(4), c.w(5), c.w(6), c.w(7), c.w(8));
+                }
                 let view = View {
                     res: c.w(2),
                     is_buffer: c.w(1) == 1,
@@ -474,6 +486,17 @@ impl Gpu {
             }
             op::SET_SRVS | op::SET_SAMPLERS => {
                 let (stage, start, count) = (c.w(0) as usize, c.w(1) as usize, c.w(2) as usize);
+                // TEMP DIAGNOSTIC: SRV binds mentioning the movie textures.
+                if c.op == op::SET_SRVS {
+                    let tbl: [(u32, &str); 6] = [
+                        (1235, "Y0"), (1237, "U0"), (1239, "V0"),
+                        (1243, "Y1"), (1245, "U1"), (1247, "V1"),
+                    ];
+                    if let Some((name, _)) = tbl.iter().find(|(id, _)| c.payload[3..].contains(id)) {
+                        log::info!("[gpu-op] bind srv {} ({}) s{} e{} n{} @[{}]", c.w(3), name, stage, start, count,
+                            c.payload[3..c.payload.len().min(20)].iter().map(|w| w.to_string()).collect::<Vec<_>>().join(","));
+                    }
+                }
                 let slots: &mut [u32] = match (c.op, stage) {
                     (op::SET_SRVS, 0..=2) => &mut self.s.srv[stage],
                     (_, 0..=2) => &mut self.s.sampler[stage],
@@ -627,6 +650,10 @@ impl Gpu {
     fn create_texture(&mut self, c: &Command) {
         let (id, dim, w, h, d, mips, array, dxgi, bind, samples) =
             (c.w(0), c.w(1), c.w(2), c.w(3), c.w(4), c.w(5), c.w(6), c.w(7), c.w(8), c.w(9));
+        if w * h >= 500_000 {
+            // TEMP DIAGNOSTIC: movie-plane-sized creations.
+            log::info!("[gpu-op] create tex {id} {w}x{h}x{d} mips {mips} dxgi {dxgi} bind {bind:#x}");
+        }
         let mut tf = format::texture(dxgi, bind & format::BIND_DS != 0, &self.caps);
         if self.objs.tex(id).is_some() {
             return;
@@ -881,7 +908,16 @@ impl Gpu {
         let (id, mip, slice, x, y, z, w, h, d, bpr, rows, size) =
             (c.w(0), c.w(1), c.w(2), c.w(3), c.w(4), c.w(5), c.w(6), c.w(7), c.w(8), c.w(9), c.w(10), c.w(11));
         if self.objs.tex(id).is_none() {
+            // TEMP DIAGNOSTIC: which textures get uploads they cannot take.
+            crate::log_once("upload-miss", || {
+                format!("UPLOAD_TEXTURE dropped: texture {id} has no object ({w}x{h}, mip {mip}, {size} bytes)")
+            });
+            self.stats.upload_drops += 1;
             return;
+        }
+        if w * h >= 500_000 {
+            // TEMP DIAGNOSTIC: movie-plane-sized uploads.
+            log::info!("[gpu-op] upload tex {id} mip {mip} slice {slice} at {x},{y} {w}x{h}x{d} bpr {bpr} rows {rows} {size} bytes");
         }
         if self.clears.iter().any(|cl| cl.tex == id) {
             self.flush_clears();
@@ -1230,9 +1266,13 @@ impl Gpu {
         let per_frame = |d: Duration| d.as_secs_f64() * 1000.0 / frames as f64;
         let mut skipped: Vec<_> = st.skipped.iter().map(|(k, n)| format!("{k} {n}")).collect();
         skipped.sort();
+        // TEMP DIAGNOSTIC: raw op counts.
+        let mut ops: Vec<_> = st.op_counts.iter().map(|(op, n)| format!("{op} {n}")).collect();
+        ops.sort_by_key(|s| s.split(' ').next().unwrap_or("").parse::<u32>().unwrap_or(0));
+        let ops = ops.join(", ");
         let c = &self.compiler;
         log::info!(
-            "gpu: {:.1} fps ({frames_line}), {} draws/frame, {} dispatches, {:.1} passes/frame (ended by {}), {:.1} submits/frame ({}), recording {:.0}% ({:.1} ms/frame), encoding {:.1} ms/frame, submitting {:.1}, presenting {:.1}, releasing {:.1}, waiting for the GPU {:.1}, for a drawable {:.1}; pipelines {} ({} failed, {:.0} ms compiling), draws waiting for one {}, skipped [{}], clamped {}, bind groups +{} ({} cached), objects {} ({memory}), errors +{}",
+            "gpu: {:.1} fps ({frames_line}), {} draws/frame, {} dispatches, {:.1} passes/frame (ended by {}), {:.1} submits/frame ({}), recording {:.0}% ({:.1} ms/frame), encoding {:.1} ms/frame, submitting {:.1}, presenting {:.1}, releasing {:.1}, waiting for the GPU {:.1}, for a drawable {:.1}; pipelines {} ({} failed, {:.0} ms compiling), draws waiting for one {}, skipped [{}], clamped {}, bind groups +{} ({} cached), objects {} ({memory}), errors +{}, ops [{}], upload drops +{}",
             st.presents as f64 / secs,
             st.draws / frames,
             st.dispatches / frames,
@@ -1258,8 +1298,11 @@ impl Gpu {
             self.binds.len(),
             self.objs.len(),
             st.errors,
+            ops,
+            st.upload_drops,
         );
         self.stats.errors = 0;
+        self.stats.upload_drops = 0;
         if let Some(p) = &self.profiler {
             log::info!("{}", crate::profile::report(&p.totals, frames));
         }

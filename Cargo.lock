@@ -775,6 +775,7 @@ name = "glue5-runtime"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cc",
  "getrandom",
  "glue5-game",
  "jiff",
